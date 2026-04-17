@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>NOESIS — Think Deeper. Build Smarter.</title>
+  <meta name="description" content="NOESIS — A system for turning ideas into functional projects. Think Deeper. Build Smarter." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,300&family=Instrument+Serif:ital@0;1&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="styles.css" />
+
+  <!-- ═══════════════════════════════════════════
+       FIREBASE SDK  (v10 compat CDN)
+       Replace the firebaseConfig object below with
+       your own project credentials from the Firebase
+       Console → Project Settings → Your apps.
+  ═══════════════════════════════════════════════ -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+  <script>
+    /* ─────────────────────────────────────────────
+       PASTE YOUR FIREBASE CONFIG HERE
+       Get it from: Firebase Console → Project Settings
+       → General → Your apps → SDK setup and config
+    ───────────────────────────────────────────── */
+    const firebaseConfig = {
+      apiKey:            "YOUR_API_KEY",
+      authDomain:        "YOUR_PROJECT_ID.firebaseapp.com",
+      projectId:         "YOUR_PROJECT_ID",
+      storageBucket:     "YOUR_PROJECT_ID.appspot.com",
+      messagingSenderId: "YOUR_SENDER_ID",
+      appId:             "YOUR_APP_ID"
+    };
+
+    // Init Firebase (only once; guard against duplicate init)
+    if (!firebase.apps.length) {
+      firebase.initializeApp(firebaseConfig);
+    }
+    window.db = firebase.firestore();
+  </script>
+</head>
+<body>
+
+  <!-- ═══════════ CANVAS BACKGROUND ═══════════ -->
+  <canvas id="bgCanvas"></canvas>
+
+  <!-- ═══════════ NAVBAR ═══════════ -->
+  <nav id="navbar">
+    <div class="nav-brand" id="navBrand" data-nav="home" title="NOESIS — Think Deeper. Build Smarter.">
+      <span class="brand-mark">◈</span>
+      <span class="brand-wordmark">
+        NO<span id="logoLetter" class="logo-letter noesis-e">E</span>SIS
+      </span>
+    </div>
+
+    <div class="nav-links" id="navLinks">
+      <a class="nav-link active" data-nav="home">Home</a>
+      <a class="nav-link" data-nav="projects">Built Systems</a>
+      <a class="nav-link" data-nav="journey">Journey</a>
+      <a class="nav-link" data-nav="ideas">Ideas Vault</a>
+      <a class="nav-link" data-nav="contact">Connect</a>
+    </div>
+
+    <div class="nav-controls">
+      <button id="themeToggle" class="icon-btn" title="Toggle theme" aria-label="Toggle light/dark mode">☀</button>
+      <button id="menuToggle" class="icon-btn menu-btn" title="Menu" aria-label="Open menu">☰</button>
+    </div>
+  </nav>
+
+  <!-- Mobile menu -->
+  <div id="mobileMenu" class="mobile-menu">
+    <a class="mobile-link" data-nav="home">Home</a>
+    <a class="mobile-link" data-nav="projects">Built Systems</a>
+    <a class="mobile-link" data-nav="journey">Journey</a>
+    <a class="mobile-link" data-nav="ideas">Ideas Vault</a>
+    <a class="mobile-link" data-nav="contact">Connect</a>
+  </div>
+
+  <!-- ═══════════ MAIN ═══════════ -->
+  <main id="mainContent">
+
+    <!-- ── HOME ── -->
+    <section id="page-home" class="page active">
+      <div class="hero-container">
+
+        <div class="hero-eyebrow scroll-reveal">
+          <span class="eyebrow-dot"></span>
+          System active — open for collaboration
+        </div>
+
+        <!-- Hero logo lockup — large animated version -->
+        <div class="hero-logo-wrap scroll-reveal">
+          <div class="hero-logo" id="heroLogo">
+            NO<span id="heroLetter" class="hero-letter noesis-e">E</span>SIS
+          </div>
+          <div class="hero-motto" id="heroMotto">
+            Think Deeper. Build Smarter.
+          </div>
+        </div>
+
+        <h1 class="hero-title scroll-reveal">
+          <span class="ht-small">A system for</span>
+          <span class="ht-large">turning ideas<br><em>into functional</em><br>projects.</span>
+        </h1>
+
+        <p class="hero-sub scroll-reveal">
+          Submit concepts. Explore built systems.<br>
+          Track the evolution from idea to execution.
+        </p>
+
+        <p class="hero-supporting scroll-reveal">
+          Ideas are collected, refined, and selectively developed.<br>
+          Not everything gets built — only what proves valuable.
+        </p>
+
+        <div class="hero-actions scroll-reveal">
+          <button class="btn btn-primary" data-nav="projects">Explore Built Systems</button>
+          <button class="btn btn-outline" data-nav="ideas">Submit an Idea</button>
+        </div>
+
+        <div class="hero-stats scroll-reveal">
+          <div class="stat-item">
+            <span class="stat-num" id="statProjects" data-target="0">0</span>
+            <span class="stat-label">Built Systems</span>
+          </div>
+          <div class="stat-sep"></div>
+          <div class="stat-item">
+            <span class="stat-num" id="statIdeas" data-target="0">0</span>
+            <span class="stat-label">Ideas in Vault</span>
+          </div>
+          <div class="stat-sep"></div>
+          <div class="stat-item">
+            <span class="stat-num" style="color:var(--accent2)">∞</span>
+            <span class="stat-label">Execution Potential</span>
+          </div>
+        </div>
+
+        <div class="tech-strip scroll-reveal">
+          <span class="tech-pill">JavaScript</span>
+          <span class="tech-pill">HTML / CSS</span>
+          <span class="tech-pill">Node.js</span>
+          <span class="tech-pill">Python</span>
+          <span class="tech-pill">React</span>
+          <span class="tech-pill">Canvas API</span>
+          <span class="tech-pill">REST APIs</span>
+          <span class="tech-pill">Git</span>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── BUILT SYSTEMS (was: PROJECTS) ── -->
+    <section id="page-projects" class="page">
+      <div class="page-header scroll-reveal">
+        <div class="section-tag">BUILT SYSTEMS</div>
+        <h2 class="section-title">Systems That Ship</h2>
+        <p class="section-sub">Repositories pulled live from GitHub — automatically updated on every push.</p>
+      </div>
+
+      <div class="projects-toolbar scroll-reveal">
+        <div class="view-toggle" id="repoToggle">
+          <button class="toggle-btn active" data-view="featured">Featured</button>
+          <button class="toggle-btn" data-view="all">All Repos</button>
+        </div>
+        <div class="github-badge" id="githubStatus"></div>
+      </div>
+
+      <div class="search-row scroll-reveal">
+        <div class="search-wrap">
+          <input type="text" id="projectSearch" class="search-input" placeholder="Search systems…" aria-label="Search projects" />
+          <span class="search-icon" aria-hidden="true">⌕</span>
+        </div>
+      </div>
+
+      <div class="card-grid" id="projectGrid">
+        <div class="loading-card skeleton"></div>
+        <div class="loading-card skeleton"></div>
+        <div class="loading-card skeleton"></div>
+        <div class="loading-card skeleton"></div>
+      </div>
+
+      <!-- Project detail modal -->
+      <div id="projectModal" class="modal-overlay" role="dialog" aria-modal="true">
+        <div class="modal-box">
+          <button class="modal-close" id="modalClose" aria-label="Close">✕</button>
+          <div id="modalContent"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── JOURNEY ── -->
+    <section id="page-journey" class="page">
+      <div class="page-header scroll-reveal">
+        <div class="section-tag">THE JOURNEY SO FAR</div>
+        <h2 class="section-title">Learning →<br><em>Creating →</em><br>Building Systems.</h2>
+        <p class="section-sub">
+          From first lines of code to structured system building,
+          this platform represents a transition from learning to creating to building systems.
+          Each phase reflects increasing complexity, autonomy, and execution.
+        </p>
+      </div>
+
+      <div class="timeline">
+
+        <div class="tl-item scroll-reveal">
+          <div class="tl-spine"><div class="tl-dot"></div><div class="tl-stem"></div></div>
+          <div class="tl-card">
+            <div class="tl-meta"><span class="tl-phase">01</span><span class="tl-tag-chip">Curiosity</span></div>
+            <h3 class="tl-title">The Spark</h3>
+            <p class="tl-body">Curiosity arrived before understanding did. Taking things apart — software, games, systems — just to see what lived underneath. The question was never <em>how</em>. It was <em>why does any of this work at all?</em></p>
+          </div>
+        </div>
+
+        <div class="tl-item scroll-reveal">
+          <div class="tl-spine"><div class="tl-dot"></div><div class="tl-stem"></div></div>
+          <div class="tl-card">
+            <div class="tl-meta"><span class="tl-phase">02</span><span class="tl-tag-chip">Web Dev</span></div>
+            <h3 class="tl-title">First Lines of Code</h3>
+            <p class="tl-body">HTML. CSS. Watching text become a webpage for the first time. That moment when the computer does exactly what it is told — no more, no less. Humbling. Empowering. Addictive.</p>
+          </div>
+        </div>
+
+        <div class="tl-item scroll-reveal">
+          <div class="tl-spine"><div class="tl-dot"></div><div class="tl-stem"></div></div>
+          <div class="tl-card">
+            <div class="tl-meta"><span class="tl-phase">03</span><span class="tl-tag-chip">Problem Solving</span></div>
+            <h3 class="tl-title">Building &amp; Breaking</h3>
+            <p class="tl-body">Projects that didn't work. Code that broke in unexpected ways. Errors that forced real learning. Every failure was a lesson wearing a disguise — and the lessons compound.</p>
+          </div>
+        </div>
+
+        <div class="tl-item scroll-reveal">
+          <div class="tl-spine"><div class="tl-dot"></div><div class="tl-stem"></div></div>
+          <div class="tl-card">
+            <div class="tl-meta"><span class="tl-phase">04</span><span class="tl-tag-chip">Systems &amp; Design</span></div>
+            <h3 class="tl-title">Thinking Beyond Code</h3>
+            <p class="tl-body">Code is a medium, not the message. The shift began toward thinking about systems, experience, and <em>why</em> something should exist before deciding how to build it. Design thinking entered the picture.</p>
+          </div>
+        </div>
+
+        <div class="tl-item scroll-reveal">
+          <div class="tl-spine"><div class="tl-dot tl-dot--accent"></div><div class="tl-stem"></div></div>
+          <div class="tl-card tl-card--featured">
+            <div class="tl-meta"><span class="tl-phase tl-phase--accent">05</span><span class="tl-tag-chip tl-tag--accent">Identity &amp; Craft</span></div>
+            <h3 class="tl-title">The NOΣIS Phase</h3>
+            <p class="tl-body">NOΣIS — from the Greek for <em>mind, understanding, intelligence</em> — became the operating lens. Thoughtful, intentional, meaningful work. Not just shipping features. Building things worth building. The platform takes form.</p>
+          </div>
+        </div>
+
+        <div class="tl-item scroll-reveal">
+          <div class="tl-spine"><div class="tl-dot tl-dot--live"></div></div>
+          <div class="tl-card">
+            <div class="tl-meta"><span class="tl-phase">Now</span><span class="tl-now-badge"><span class="now-pulse"></span>Active</span></div>
+            <h3 class="tl-title">System in Operation</h3>
+            <p class="tl-body">The platform is live and evolving. Systems are built, refined, and shipped. Ideas are collected and filtered. Collaboration is open. The execution continues.</p>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ── IDEAS VAULT ── -->
+    <section id="page-ideas" class="page">
+      <div class="page-header scroll-reveal">
+        <div class="section-tag">IDEAS VAULT</div>
+        <h2 class="section-title">The Vault</h2>
+        <p class="section-sub">Ideas are submitted, stored, and selectively developed. Only the strongest get built.</p>
+      </div>
+
+      <!-- ── Submit Idea Form (Firebase-powered) ── -->
+      <div class="idea-form-shell scroll-reveal" id="ideaFormShell">
+        <button class="idea-toggle-btn" id="ideaFormToggle">
+          <span>+ Submit an idea to the vault</span>
+          <span class="toggle-arrow">▼</span>
+        </button>
+        <div class="idea-form" id="ideaForm">
+          <input type="text"  id="ideaName"      class="form-input"    placeholder="Your name *"                      maxlength="60" />
+          <input type="email" id="ideaEmail"     class="form-input"    placeholder="Your email *"                     maxlength="100"/>
+          <textarea           id="ideaDesc"      class="form-textarea" placeholder="Describe the idea *"              maxlength="500" rows="4"></textarea>
+          <input type="url"   id="ideaProtoLink" class="form-input"    placeholder="Prototype / demo link (optional)" maxlength="200"/>
+          <div class="form-row form-row--submit">
+            <button class="btn btn-primary" id="saveIdeaBtn">
+              <span id="saveIdeaBtnText">Submit to Vault</span>
+            </button>
+            <div id="formError" class="form-error" role="alert"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Filter pills -->
+      <div class="filter-row scroll-reveal" id="ideasFilterRow">
+        <button class="pill-filter active" data-idea-filter="all">All</button>
+        <button class="pill-filter" data-idea-filter="App">App</button>
+        <button class="pill-filter" data-idea-filter="Game">Game</button>
+        <button class="pill-filter" data-idea-filter="Website">Website</button>
+        <button class="pill-filter" data-idea-filter="Tool">Tool</button>
+      </div>
+
+      <!-- Ideas list (from Firestore) -->
+      <div class="card-grid" id="ideasGrid">
+        <div class="loading-card skeleton"></div>
+        <div class="loading-card skeleton"></div>
+        <div class="loading-card skeleton"></div>
+      </div>
+
+    </section>
+
+    <!-- ── CONNECT (was: CONTACT) ── -->
+    <section id="page-contact" class="page">
+      <div class="page-header scroll-reveal">
+        <div class="section-tag">CONNECT</div>
+        <h2 class="section-title">Access the System.</h2>
+        <p class="section-sub">Collaboration requests, project inquiries, and system access — open channels below.</p>
+      </div>
+
+      <div class="contact-grid scroll-reveal">
+
+        <a href="https://x.com/samuelOLUWA" target="_blank" rel="noopener noreferrer" class="contact-card contact-x">
+          <div class="c-icon">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20" aria-hidden="true">
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+            </svg>
+          </div>
+          <div class="c-info"><span class="c-name">X (Twitter)</span><span class="c-handle">@samuelOLUWA</span></div>
+          <span class="c-arrow">→</span>
+        </a>
+
+        <a href="https://github.com/moyinoluwasamuel288" target="_blank" rel="noopener noreferrer" class="contact-card contact-gh">
+          <div class="c-icon">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20" aria-hidden="true">
+              <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0 0 22 12.017C22 6.484 17.522 2 12 2z"/>
+            </svg>
+          </div>
+          <div class="c-info"><span class="c-name">GitHub</span><span class="c-handle">moyinoluwasamuel288</span></div>
+          <span class="c-arrow">→</span>
+        </a>
+
+        <div class="contact-card contact-email" id="emailCard" tabindex="0" role="button">
+          <div class="c-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20" aria-hidden="true">
+              <rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 8l10 6 10-6"/>
+            </svg>
+          </div>
+          <div class="c-info"><span class="c-name">Email</span><span class="c-handle" id="emailText">moyinoluwasamuel288@gmail.com</span></div>
+          <button class="copy-btn" id="copyEmail" aria-label="Copy email">Copy</button>
+        </div>
+
+        <div class="contact-card contact-phone" id="phoneCard" tabindex="0" role="button">
+          <div class="c-icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="20" height="20" aria-hidden="true">
+              <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>
+            </svg>
+          </div>
+          <div class="c-info"><span class="c-name">Phone</span><span class="c-handle" id="phoneText">07070944581</span></div>
+          <button class="copy-btn" id="copyPhone" aria-label="Copy phone">Copy</button>
+        </div>
+
+      </div>
+
+      <!-- Contact form -->
+      <div class="contact-form-block scroll-reveal">
+        <h3 class="cf-title">Send a message</h3>
+        <div class="contact-form">
+          <div class="form-row">
+            <input type="text"  class="form-input" id="cfName"    placeholder="Your name" />
+            <input type="email" class="form-input" id="cfEmail"   placeholder="Your email" />
+          </div>
+          <input type="text"    class="form-input" id="cfSubject" placeholder="Subject" style="width:100%" />
+          <textarea class="form-textarea" id="cfMessage" rows="4" placeholder="Describe the collaboration or inquiry…"></textarea>
+          <button class="btn btn-primary" id="cfSubmit">Send Message</button>
+          <div id="cfFeedback" class="form-feedback" role="alert"></div>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer id="siteFooter">
+    <div class="footer-inner">
+      <span class="footer-brand">NO<span class="footer-sigma">Σ</span>IS</span>
+      <span class="footer-motto">Think Deeper. Build Smarter.</span>
+      <span class="footer-copy">NOESIS System · <span id="footerYear"></span></span>
+    </div>
+  </footer>
+
+  <!-- Toast -->
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="script.js"></script>
+</body>
+</html>

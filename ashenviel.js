@@ -495,4 +495,1618 @@ class Entity {
     // Y
     const ny = this.y+dy;
     const yBlocked = (
-      map.solid(this.x-hw+
+      map.solid(this.x-hw+1, ny-this.h+2) ||
+      map.solid(this.x+hw-1, ny-this.h+2) ||
+      map.solid(this.x-hw+1, ny-2) ||
+      map.solid(this.x+hw-1, ny-2)
+    );
+    if (!yBlocked) this.y = ny;
+  }
+
+  setFacing(dx,dy) {
+    if (Math.abs(dx) > Math.abs(dy))
+      this.facing = dx > 0 ? 'right' : 'left';
+    else if (dy !== 0)
+      this.facing = dy > 0 ? 'down' : 'up';
+  }
+
+  update(dt,world) {}
+  draw(ctx,cam) {}
+}
+
+// ─────────────────────────────────────────────
+// §10  PLAYER
+// ─────────────────────────────────────────────
+class Player extends Entity {
+  constructor(x,y) {
+    super(x,y);
+    this.stats = { hp:100, maxHp:100, power:20, luck:50, morality:50 };
+    this._stepT = 0;
+    this._trail = [];
+    this._moving = false;
+    // Cinematic
+    this._cinTgt = null;
+    this._cinSpd = 0;
+    this._cinCb  = null;
+    this._locked = false;   // blocks player input (narrative)
+    // Zone proximity (set each frame by Game)
+    this.nearZone   = null;
+    this.nearEntity = null;
+    this._animF = 0;
+  }
+
+  // Narrative calls this to move player cinematically
+  walkTo(wx, wy, speed, onDone) {
+    this._cinTgt = {x:wx, y:wy};
+    this._cinSpd = speed || CFG.SPD;
+    this._cinCb  = onDone || null;
+    this._locked = true;
+  }
+  unlock() { this._locked=false; this._cinTgt=null; }
+
+  update(dt, world) {
+    this._at += dt;
+    this._animF = Math.floor(this._at * 9) % 4;
+
+    if (this._cinTgt) {
+      this._updateCinematic(dt, world.map);
+    } else if (!this._locked) {
+      this._updateInput(dt, world);
+    } else {
+      this._moving = false;
+    }
+    // Trail
+    this._trail.unshift({x:this.x, y:this.y});
+    if (this._trail.length > 7) this._trail.pop();
+  }
+
+  _updateCinematic(dt, map) {
+    const dx = this._cinTgt.x - this.x;
+    const dy = this._cinTgt.y - this.y;
+    const d  = Math.hypot(dx, dy);
+    if (d < 2.5) {
+      this.x = this._cinTgt.x; this.y = this._cinTgt.y;
+      const cb = this._cinCb;
+      this._cinTgt = null; this._cinCb = null; this._locked = false;
+      this._moving = false;
+      if (cb) cb();
+    } else {
+      const spd = this._cinSpd * dt;
+      this.move(dx/d*spd, dy/d*spd, map);
+      this.setFacing(dx, dy);
+      this._moving = true;
+    }
+  }
+
+  _updateInput(dt, world) {
+    const ax = Input.axis();
+    this._moving = (ax.x !== 0 || ax.y !== 0);
+    if (this._moving) {
+      this.move(ax.x * CFG.SPD * dt, ax.y * CFG.SPD * dt, world.map);
+      this.setFacing(ax.x, ax.y);
+      this._stepT += dt;
+      if (this._stepT > 0.20) {
+        this._stepT = 0;
+        world.particles.dust(this.x, this.y+2);
+      }
+    }
+  }
+
+  draw(ctx, cam) {
+    const s  = cam.ws(this.x, this.y);
+    const sx = Math.round(s.x), sy = Math.round(s.y);
+
+    // Trail
+    if (this._moving) {
+      this._trail.forEach((t,i) => {
+        const ts = cam.ws(t.x, t.y);
+        ctx.globalAlpha = (1 - i/this._trail.length) * 0.09;
+        ctx.fillStyle = '#d0c0a0';
+        ctx.fillRect(Math.round(ts.x)-3, Math.round(ts.y)-5, 7, 9);
+      });
+      ctx.globalAlpha = 1;
+    }
+
+    const bob = this._moving ? Math.sin(this._at*12)*1 : 0;
+    const by  = sy - 10 + bob;
+
+    // Shadow
+    ctx.fillStyle='rgba(0,0,0,0.32)'; ctx.fillRect(sx-4,sy-1,9,3);
+    // Cloak
+    ctx.fillStyle='#1c1428'; ctx.fillRect(sx-4,by+2,9,9);
+    // Body
+    ctx.fillStyle='#2e2440'; ctx.fillRect(sx-3,by+3,7,6);
+    // Chest
+    ctx.fillStyle='#3c3258'; ctx.fillRect(sx-2,by+4,5,3);
+    // Head
+    ctx.fillStyle='#c0a878'; ctx.fillRect(sx-2,by-1,5,5);
+    // Hood
+    ctx.fillStyle='#17101e'; ctx.fillRect(sx-3,by-3,7,4); ctx.fillRect(sx-2,by-4,5,2);
+    // Eyes
+    ctx.fillStyle='#90d8ff';
+    if (this.facing==='right')      ctx.fillRect(sx+1,by,2,1);
+    else if (this.facing==='left')  ctx.fillRect(sx-2,by,2,1);
+    else if (this.facing==='down') { ctx.fillRect(sx-1,by,2,1); ctx.fillRect(sx+2,by,1,1); }
+    // Weapon
+    if (this.facing==='right') { ctx.fillStyle='#6878b0'; ctx.fillRect(sx+3,by+2,1,7); }
+    if (this.facing==='left')  { ctx.fillStyle='#6878b0'; ctx.fillRect(sx-3,by+2,1,7); }
+    // Interact indicator
+    if (this.nearZone || this.nearEntity) {
+      const p = Math.sin(this._at*5)*0.5+0.5;
+      ctx.fillStyle = `rgba(232,200,112,${0.5+p*0.5})`;
+      ctx.fillRect(sx-1,by-7,3,2); ctx.fillRect(sx,by-9,1,2);
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+// §11  NPC
+// ─────────────────────────────────────────────
+class NPC extends Entity {
+  constructor(x, y, def) {
+    super(x,y);
+    this.def        = def;
+    this.name       = def.name   || 'NPC';
+    this.col        = def.col    || '#a08060';
+    this.colD       = def.colD   || '#705040';
+    this.speed      = def.speed  || 26;
+    this.patrol     = def.patrol || [];
+    this._pi        = 0;
+    this._idle      = 0;
+    this._idleMax   = 1.5 + Math.random()*2.5;
+    this.state      = this.patrol.length ? 'patrol' : 'idle';
+    this.interactable = def.interactable !== false;
+    this.nodeId     = def.nodeId || null;
+    this._talked    = false;
+    this.smoky      = def.smoky  || false;
+  }
+
+  update(dt, world) {
+    this._at += dt;
+    if (this.smoky && Math.random() < 0.04)
+      world.particles.smoke(this.x, this.y-12);
+
+    if (this.state==='patrol' && this.patrol.length) {
+      const tgt = this.patrol[this._pi];
+      const dx = tgt.x-this.x, dy = tgt.y-this.y;
+      const d  = Math.hypot(dx,dy);
+      if (d < 3) {
+        this._pi = (this._pi+1) % this.patrol.length;
+        this.state='idle'; this._idle=0;
+        this._idleMax = 1.0 + Math.random()*2;
+      } else {
+        this.move(dx/d*this.speed*dt, dy/d*this.speed*dt, world.map);
+        this.setFacing(dx,dy);
+        this._moving = true;
+      }
+    } else if (this.state==='idle') {
+      this._idle += dt;
+      if (this._idle > this._idleMax) this.state='patrol';
+      this._moving = false;
+    }
+  }
+
+  draw(ctx, cam) {
+    if (!cam.vis(this.x-8, this.y-14, 16,14)) return;
+    const s  = cam.ws(this.x, this.y);
+    const sx = Math.round(s.x), sy = Math.round(s.y);
+    const bob = this._moving ? Math.sin(this._at*9)*0.8 : 0;
+    const by  = sy-10+bob;
+
+    ctx.fillStyle='rgba(0,0,0,0.26)'; ctx.fillRect(sx-3,sy-1,7,3);
+    ctx.fillStyle=this.colD; ctx.fillRect(sx-3,by+3,7,7);
+    ctx.fillStyle=this.col;  ctx.fillRect(sx-2,by+2,6,6);
+    ctx.fillStyle='#b09070'; ctx.fillRect(sx-2,by-2,4,4);
+
+    if (this.def.showName) {
+      ctx.fillStyle='rgba(200,210,230,0.62)';
+      ctx.font='4px "Press Start 2P"';
+      ctx.textAlign='center';
+      ctx.fillText(this.name, sx+0.5, by-5);
+      ctx.textAlign='left';
+    }
+    // Exclamation (untriggered dialogue)
+    if (this.interactable && !this._talked) {
+      const p = Math.sin(this._at*4)*0.5+0.5;
+      ctx.fillStyle = `rgba(232,200,112,${0.48+p*0.52})`;
+      ctx.fillRect(sx, by-10, 2,5);
+      ctx.fillRect(sx, by-4,  2,2);
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+// §12  MONSTER
+// ─────────────────────────────────────────────
+class Monster extends Entity {
+  constructor(x, y, def) {
+    super(x,y);
+    this.def      = def;
+    this.name     = def.name;
+    this.hp       = def.hp;
+    this.maxHp    = def.hp;
+    this.speed    = def.speed   || 50;
+    this.aggroR   = def.aggroR  || 90;
+    this.captureAt= def.captureAt||0.32;
+    this.col      = def.col     || '#a04060';
+    this.state    = 'wander';
+    this._wt      = 0;
+    this._wdir    = {x:0,y:0};
+    this.interactable = false;
+  }
+
+  update(dt, world) {
+    this._at += dt;
+    const px = world.player.x, py = world.player.y;
+    const d  = dist2(this.x,this.y,px,py);
+    const pct= this.hp / this.maxHp;
+
+    this.interactable = (pct < this.captureAt) && this.def.capturable;
+
+    if (pct < this.captureAt) {
+      this.state = 'flee';
+    } else if (d < this.aggroR) {
+      this.state = 'chase';
+    } else {
+      this.state = 'wander';
+    }
+
+    if (this.state==='chase') {
+      const nx=(px-this.x)/d, ny=(py-this.y)/d;
+      this.move(nx*this.speed*dt, ny*this.speed*dt, world.map);
+      this.setFacing(px-this.x, py-this.y);
+      // Contact damage
+      if (d < 10) {
+        world.player.stats.hp = Math.max(0, world.player.stats.hp - 7*dt);
+        EB.emit('hud:refresh');
+      }
+    } else if (this.state==='flee') {
+      const nx=-(px-this.x)/d, ny=-(py-this.y)/d;
+      this.move(nx*this.speed*1.25*dt, ny*this.speed*1.25*dt, world.map);
+      if (Math.random()<0.06)
+        world.particles.emit({x:this.x,y:this.y-4,n:2,speed:10,decay:1.5,sz:2,col:this.col,grav:-14});
+    } else {
+      this._wt += dt;
+      if (this._wt > 2.0) {
+        this._wt = 0;
+        this._wdir = {x:rand(-1,1), y:rand(-1,1)};
+      }
+      const wl = Math.hypot(this._wdir.x, this._wdir.y);
+      if (wl > 0) this.move(this._wdir.x/wl*this.speed*0.28*dt, this._wdir.y/wl*this.speed*0.28*dt, world.map);
+    }
+  }
+
+  damage(v, world) {
+    this.hp = Math.max(0, this.hp-v);
+    world.particles.blood(this.x,this.y);
+    world.cam.addShake(3, 0.18);
+    if (this.hp <= 0) { world.particles.spark(this.x,this.y,this.col); this.alive=false; }
+  }
+
+  draw(ctx, cam) {
+    if (!cam.vis(this.x-10, this.y-16, 20,16)) return;
+    const s  = cam.ws(this.x, this.y);
+    const sx = Math.round(s.x), sy = Math.round(s.y);
+    const pct= this.hp/this.maxHp;
+
+    // Capturable glow
+    if (pct < this.captureAt) {
+      const gp = Math.sin(this._at*6)*0.5+0.5;
+      ctx.globalAlpha = 0.22+gp*0.22;
+      ctx.fillStyle = this.col; ctx.fillRect(sx-9,sy-15,18,15);
+      ctx.globalAlpha = 1;
+    }
+
+    // Shadow
+    ctx.fillStyle='rgba(0,0,0,0.32)'; ctx.fillRect(sx-5,sy-2,10,3);
+
+    // Sprite (defined per monster def)
+    this.def.draw(ctx, sx, sy, this._at, this);
+
+    // HP bar
+    ctx.fillStyle='#3a0000'; ctx.fillRect(sx-6,sy-18,12,2);
+    ctx.fillStyle = pct>0.5?'#40c040':pct>0.25?'#c0a040':'#c04040';
+    ctx.fillRect(sx-6,sy-18, Math.round(12*pct), 2);
+
+    // Capture label
+    if (pct < this.captureAt) {
+      const fa = 0.6 + Math.sin(this._at*8)*0.4;
+      ctx.fillStyle = `rgba(160,64,200,${fa})`;
+      ctx.font='4px "Press Start 2P"';
+      ctx.textAlign='center';
+      ctx.fillText('[E] CAPTURE', sx+0.5, sy-21);
+      ctx.textAlign='left';
+    }
+  }
+}
+
+// Monster sprite definitions
+const MDEF = {
+  lurker: {
+    id:'lurker', name:'LURKER', hp:38, speed:54, aggroR:84, captureAt:0.35,
+    col:'#6040a0', capturable:true, cdTurns:3, maxUses:4,
+    summonText:'The Lurker melts into shadow. All enemies scatter.',
+    onSummon(world) {
+      world.entities.forEach(e => { if (e instanceof Monster) e.state='flee'; });
+    },
+    draw(c,sx,sy,t,self) {
+      const p = Math.sin(t*4)*0.8;
+      c.fillStyle='#2a1035'; c.fillRect(sx-6,sy-12+p,12,11);
+      c.fillStyle='#6040a0'; c.fillRect(sx-5,sy-13+p,10,9);
+      c.fillStyle='#8060c0'; c.fillRect(sx-3,sy-14+p,6,4);
+      c.fillStyle='#f0d0ff';
+      c.fillRect(sx-3,sy-11+p,2,2);
+      c.fillRect(sx+1, sy-11+p,2,2);
+      c.fillStyle='#3a1060';
+      c.fillRect(sx-7,sy-9+p,2,5);
+      c.fillRect(sx+5, sy-10+p,2,6);
+    }
+  },
+  ashwolf: {
+    id:'ashwolf', name:'ASHWOLF', hp:58, speed:66, aggroR:98, captureAt:0.30,
+    col:'#a06030', capturable:true, cdTurns:4, maxUses:3,
+    summonText:'The Ashwolf charges through. Ground cracks in its wake.',
+    onSummon(world) {
+      world.entities.forEach(e => { if (e instanceof Monster) e.damage(30, world); });
+    },
+    draw(c,sx,sy,t,self) {
+      const r = self.state==='chase' ? Math.sin(t*8)*0.8 : 0;
+      c.fillStyle='#5a3018'; c.fillRect(sx-7,sy-10+r,14,8);
+      c.fillStyle='#9a5028'; c.fillRect(sx-6,sy-11+r,12,7);
+      c.fillStyle='#aa6030'; c.fillRect(sx-3,sy-14+r,8,6);
+      c.fillRect(sx+4,sy-13+r,3,3);
+      c.fillStyle='#ff9020';
+      c.fillRect(sx-1,sy-12+r,2,2);
+      c.fillRect(sx+2, sy-12+r,2,2);
+      c.fillStyle='#7a4020';
+      c.fillRect(sx-5,sy-3+r,3,4);
+      c.fillRect(sx+2, sy-4+r,3,5);
+    }
+  },
+  shadowcrab: {
+    id:'shadowcrab', name:'SHADOW CRAB', hp:44, speed:44, aggroR:68, captureAt:0.30,
+    col:'#1a3060', capturable:true, cdTurns:3, maxUses:3,
+    summonText:'The Shadow Crab flanks your enemies. They cannot see it coming.',
+    onSummon(world) { world.cam.addShake(5, 0.45); },
+    draw(c,sx,sy,t,self) {
+      const w = Math.sin(t*5)*1;
+      c.fillStyle='#102030'; c.fillRect(sx-8,sy-7+w,16,8);
+      c.fillStyle='#1a3050'; c.fillRect(sx-7,sy-8+w,14,7);
+      c.fillStyle='#204060'; c.fillRect(sx-3,sy-11+w,6,5);
+      c.fillStyle='#60b0ff';
+      c.fillRect(sx-2,sy-10+w,2,2);
+      c.fillRect(sx+1, sy-10+w,2,2);
+      c.fillStyle='#1a3050';
+      c.fillRect(sx-11,sy-5+w,4,3);
+      c.fillRect(sx+7,  sy-5+w,4,3);
+    }
+  },
+};
+
+// ─────────────────────────────────────────────
+// §13  SUMMON SYSTEM
+// ─────────────────────────────────────────────
+class SummonSys {
+  constructor() { this.bag = {}; }  // id → {def, cd, uses, max}
+
+  capture(monster, world) {
+    const id = monster.def.id;
+    if (this.bag[id]) { EB.emit('toast', `Already bound: ${monster.name}`); return false; }
+    this.bag[id] = { def:monster.def, name:monster.name, cd:0, uses:0, max:monster.def.maxUses||4 };
+    world.particles.capture(monster.x, monster.y);
+    EB.emit('narrator:q', { text:`${monster.def.name} is bound to your will.`, tag:'CAPTURE', dur:3200 });
+    EB.emit('summon:refresh');
+    return true;
+  }
+
+  canUse(id) {
+    const s = this.bag[id];
+    return s && s.cd===0 && s.uses < s.max;
+  }
+
+  use(id, world) {
+    if (!this.canUse(id)) return false;
+    const s = this.bag[id];
+    s.cd = s.def.cdTurns || 3; s.uses++;
+    world.particles.capture(world.player.x, world.player.y);
+    if (s.def.onSummon) s.def.onSummon(world);
+    EB.emit('narrator:q', { text:s.def.summonText||`${s.name} answers.`, tag:'SUMMON', dur:3000 });
+    EB.emit('summon:refresh');
+    return true;
+  }
+
+  tick() {
+    for (const s of Object.values(this.bag)) if (s.cd>0) s.cd--;
+    EB.emit('summon:refresh');
+  }
+}
+
+// ─────────────────────────────────────────────
+// §14  CAMERA
+// ─────────────────────────────────────────────
+class Camera {
+  constructor(vw, vh) {
+    this.x=0; this.y=0; this.vw=vw; this.vh=vh;
+    this.sx=0; this.sy=0;    // shake offset
+    this._sd=0; this._sm=0;  // shake duration/mag
+  }
+  addShake(mag, dur) { this._sm=mag; this._sd=dur; }
+  update(dt, mapW, mapH, target) {
+    // Shake
+    if (this._sd>0) {
+      this._sd -= dt;
+      this.sx = (Math.random()-0.5)*this._sm;
+      this.sy = (Math.random()-0.5)*this._sm;
+    } else { this.sx=0; this.sy=0; }
+    // Follow
+    const tx = target.x - this.vw/2;
+    const ty = target.y - this.vh/2;
+    this.x = lerp(this.x, tx, 0.11);
+    this.y = lerp(this.y, ty, 0.11);
+    this.x = clamp(this.x, 0, Math.max(0, mapW-this.vw));
+    this.y = clamp(this.y, 0, Math.max(0, mapH-this.vh));
+  }
+  ws(wx,wy) { return { x: wx-this.x+this.sx, y: wy-this.y+this.sy }; }
+  vis(wx,wy,w,h) { const s=this.ws(wx,wy); return s.x+w>0&&s.x<this.vw&&s.y+h>0&&s.y<this.vh; }
+}
+
+// ─────────────────────────────────────────────
+// §15  NARRATOR UI — floating, typewriter, queued
+// ─────────────────────────────────────────────
+class NarratorUI {
+  constructor() {
+    this._el=null; this._txt=null; this._tag=null;
+    this._q=[]; this._busy=false; this._timer=null;
+  }
+  init() {
+    this._el  = document.getElementById('narrator');
+    this._txt = document.getElementById('n-txt');
+    this._tag = document.getElementById('n-tag');
+    this._cur = document.getElementById('n-cur');
+  }
+
+  // tag, dur, pos: 'n-top'|'n-mid'|'n-btm'
+  show(text, tag='NARRATOR', dur=4000, pos='n-top') {
+    this._q.push({text, tag, dur, pos});
+    if (!this._busy) this._next();
+  }
+
+  _next() {
+    if (!this._q.length) { this._busy=false; return; }
+    this._busy = true;
+    const {text,tag,dur,pos} = this._q[0];
+    // Position
+    this._el.classList.remove('n-top','n-mid','n-btm');
+    this._el.classList.add(pos);
+    this._tag.textContent = tag;
+    this._txt.textContent = '';
+    this._cur.style.display = 'inline-block';
+    this._el.classList.add('visible');
+    // Typewriter
+    let i=0;
+    const type = () => {
+      if (!this._busy) return;
+      if (i <= text.length) { this._txt.textContent = text.slice(0,i); i++; setTimeout(type,18); }
+    };
+    type();
+    clearTimeout(this._timer);
+    this._timer = setTimeout(() => {
+      this._el.classList.remove('visible');
+      setTimeout(() => { this._q.shift(); this._next(); }, 420);
+    }, dur);
+  }
+
+  hide() {
+    clearTimeout(this._timer);
+    this._el?.classList.remove('visible');
+    this._q=[]; this._busy=false;
+  }
+}
+
+// ─────────────────────────────────────────────
+// §16  CHOICE UI
+// ─────────────────────────────────────────────
+class ChoiceUI {
+  constructor() { this._el = document.getElementById('choices'); }
+
+  show(choices, eng, world) {
+    this._el.innerHTML = '';
+    choices.forEach((ch,i) => {
+      const ok = eng.checkReq(ch.requires, world);
+      const btn = document.createElement('button');
+      btn.className = 'cb';
+      btn.disabled = !ok;
+
+      let html = `<span class="cb-key">[${i+1}]</span> ${ch.text}`;
+      if (ch.cost) {
+        const parts = Object.entries(ch.cost).map(([k,v])=>`${k}${v>0?'+':''}${v}`);
+        html += `<span class="cb-cost">${parts.join(' · ')}</span>`;
+      }
+      if (!ok && ch.requires) {
+        const hint = ch.requires.flag
+          ? `🔒 need: ${ch.requires.flag}`
+          : ch.requires.stat
+          ? `🔒 need ${ch.requires.stat} ≥ ${ch.requires.min}`
+          : ch.requires.summon
+          ? `🔒 need summon: ${ch.requires.summon}`
+          : '';
+        html += `<span class="cb-lock">${hint}</span>`;
+      }
+      btn.innerHTML = html;
+      if (ok) btn.addEventListener('click', () => { this.hide(); eng.execChoice(ch, world); });
+      this._el.appendChild(btn);
+    });
+    this._el.classList.add('visible');
+  }
+
+  hide() { this._el.classList.remove('visible'); this._el.innerHTML=''; }
+}
+
+// ─────────────────────────────────────────────
+// §17  NARRATIVE ENGINE
+// ─────────────────────────────────────────────
+class NarrativeEngine {
+  constructor(narrator, choiceUI) {
+    this.narrator  = narrator;
+    this.choiceUI  = choiceUI;
+    this.flags     = {};
+    this.isBlocking = false;
+  }
+
+  setFlag(k, v=true) { this.flags[k]=v; EB.emit('flag:set',{k,v}); }
+  flag(k) { return !!this.flags[k]; }
+
+  checkReq(req, world) {
+    if (!req) return true;
+    if (req.flag   && !this.flags[req.flag]) return false;
+    if (req.stat) {
+      const v = world?.player?.stats[req.stat];
+      if (v === undefined || v < req.min) return false;
+    }
+    if (req.summon && !world?.summons?.bag[req.summon]) return false;
+    return true;
+  }
+
+  enter(nodeId, world) {
+    const node = STORY[nodeId];
+    if (!node) { console.warn('[Narrative] missing node:', nodeId); return; }
+    this.choiceUI.hide();
+    if (node.onEnter) node.onEnter(this, world);
+    if (node.choices?.length) this.choiceUI.show(node.choices, this, world);
+  }
+
+  execChoice(ch, world) {
+    // Stat deltas
+    if (ch.delta && world?.player) {
+      for (const [k,v] of Object.entries(ch.delta)) {
+        if (k in world.player.stats)
+          world.player.stats[k] = clamp(world.player.stats[k]+v, 0, 100);
+      }
+      EB.emit('hud:refresh');
+    }
+    // Flags
+    if (ch.flags) for (const [k,v] of Object.entries(ch.flags)) this.setFlag(k,v);
+    // Action (the gameplay bridge — runs BEFORE next node)
+    if (ch.action) {
+      ch.action(this, world);
+    } else if (ch.next) {
+      setTimeout(() => this.enter(ch.next, world), 350);
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+// §18  WORLD MANAGER — stages 1-4
+// ─────────────────────────────────────────────
+const STAGES = {
+  1: { label:'STAGE 1 — FOREST RUINS',  sky:'#07080f' },
+  2: { label:'STAGE 2 — MAREN VILLAGE', sky:'#080a12' },
+  3: { label:'STAGE 3 — VALE CITY',     sky:'#060810' },
+  4: { label:'STAGE 4 — DUNGEON DEEP',  sky:'#040407' },
+};
+
+class WorldManager {
+  constructor() {
+    this.stage    = 1;
+    this.map      = null;
+    this.entities = [];
+    this._spawnX  = 0;
+    this._spawnY  = 0;
+  }
+
+  build(stage) {
+    this.stage = clamp(stage,1,4);
+    this.entities = [];
+    switch (this.stage) {
+      case 1: this.map=this._s1(); this._spawnX=320; this._spawnY=272; break;
+      case 2: this.map=this._s2(); this._spawnX=88;  this._spawnY=296; break;
+      case 3: this.map=this._s3(); this._spawnX=200; this._spawnY=152; break;
+      case 4: this.map=this._s4(); this._spawnX=196; this._spawnY=272; break;
+    }
+    return this.map;
+  }
+
+  spawnPlayer(player) {
+    player.x=this._spawnX; player.y=this._spawnY;
+    player._cinTgt=null; player._locked=false;
+    player._trail=[];
+  }
+
+  // ── helpers ──────────────────────────────────
+  _fill(d,W,c,r,w,h,v) { for(let rr=r;rr<r+h;rr++) for(let cc=c;cc<c+w;cc++) { if(cc>=0&&cc<W&&rr>=0) d[rr*W+cc]=v; } }
+
+  _s1() {
+    const W=CFG.MW, H=CFG.MH, d=new Array(W*H).fill(T.GRASS);
+    const s=(c,r,v)=>{ if(c>=0&&c<W&&r>=0&&r<H) d[r*W+c]=v; };
+    const f=this._fill.bind(this,d,W);
+
+    // Tree border
+    for(let c=0;c<W;c++){ s(c,0,T.TREE); s(c,H-1,T.TREE); }
+    for(let r=0;r<H;r++){ s(0,r,T.TREE); s(W-1,r,T.TREE); }
+    // Scattered interior trees
+    for(let r=1;r<H-1;r++) for(let c=1;c<W-1;c++)
+      if((c*13+r*7)%17===0) s(c,r,T.TREE);
+    // Central clearing
+    f(17,11,16,13,T.GRASS);
+    // Water lake
+    f(5,7,9,6,T.WATER);
+    // Dirt path
+    for(let c=7;c<=33;c++) s(c,17,T.DIRT);
+    for(let r=9;r<=17;r++) s(22,r,T.DIRT);
+    // Ruins
+    f(9,4,6,5,T.RUIN); s(11,5,T.WALL); s(12,4,T.WALL); s(13,6,T.WALL);
+    // Shrine
+    s(22,9,T.SHRINE);
+    // Portal (next stage)
+    s(24,14,T.PORTAL); s(25,14,T.PORTAL);
+
+    const map = new TileMap(d,W,H);
+    map.addZone({cx:22*16+8, cy:9*16+8,  r:24, id:'shrine', label:'Shrine of Ash'});
+    map.addZone({cx:24*16+16,cy:14*16+8, r:28, id:'portal', label:'Enter Village →'});
+    map.addZone({cx:12*16+8, cy:6*16+8,  r:26, id:'ruins',  label:'Ancient Ruins'});
+
+    // Entities
+    this.entities.push(new NPC(298,252,{
+      name:'WANDERER',col:'#7090a0',colD:'#405060',speed:22,showName:true,
+      interactable:true,nodeId:'wanderer_s1',
+      patrol:[{x:288,y:245},{x:315,y:258},{x:300,y:272},{x:278,y:260}]
+    }));
+    this.entities.push(new NPC(178,118,{
+      name:'RUIN KEEPER',col:'#908060',colD:'#605040',speed:16,showName:true,
+      interactable:true,nodeId:'ruinkeeper',
+      patrol:[{x:178,y:118},{x:192,y:114},{x:188,y:128},{x:175,y:132}]
+    }));
+    this.entities.push(new Monster(228,158,MDEF.lurker));
+    this.entities.push(new Monster(172,302,MDEF.ashwolf));
+    return map;
+  }
+
+  _s2() {
+    const W=CFG.MW, H=CFG.MH, d=new Array(W*H).fill(T.GRASS);
+    const s=(c,r,v)=>{ if(c>=0&&c<W&&r>=0&&r<H) d[r*W+c]=v; };
+    const f=this._fill.bind(this,d,W);
+
+    for(let c=0;c<W;c++){ s(c,0,T.TREE); s(c,H-1,T.TREE); }
+    for(let r=0;r<H;r++){ s(0,r,T.TREE); s(W-1,r,T.TREE); }
+    // Roads
+    for(let c=2;c<W-2;c++) s(c,H/2|0,T.ROAD);
+    for(let r=2;r<H-2;r++) s(W/2|0,r,T.ROAD);
+    // Houses
+    [[5,5],[9,5],[13,5],[17,5],[5,25],[10,25],[15,25],[19,25],
+     [28,8],[33,8],[37,8],[28,22],[33,22],[37,22]]
+    .forEach(([c,r])=>f(c,r,3,3,T.HOUSE));
+    // Water feature
+    f(38,5,5,5,T.WATER);
+    // Tree cluster (right side only — left cluster removed; blocked player spawn)
+    f(24,3,4,5,T.TREE);
+    // Dirt around market
+    f(22,14,7,4,T.DIRT);
+    // Portal to city
+    s(W-3,(H/2|0),T.PORTAL); s(W-3,(H/2|0)+1,T.PORTAL);
+
+    const map = new TileMap(d,W,H);
+    map.addZone({cx:(W-3)*16+8, cy:(H/2|0)*16+8, r:30, id:'portal', label:'City Gate →'});
+    map.addZone({cx:(W/2|0)*16+8, cy:14*16+8, r:30, id:'market', label:'Village Market'});
+
+    // NPCs
+    const names  = ['ANNA','MERCHANT','GUARD','FARMER','CHILD','ELDER','SMITH','SCOUT'];
+    const cols   = ['#a08060','#806040','#7090c0','#80a060','#c09060','#a0b0c0','#806050','#708090'];
+    const pts    = [{x:80,y:195},{x:105,y:208},{x:128,y:192},{x:205,y:272},
+                    {x:228,y:264},{x:352,y:178},{x:375,y:192},{x:456,y:228}];
+    pts.forEach((p,i)=>this.entities.push(new NPC(p.x,p.y,{
+      name:names[i]||'VILLAGER', col:cols[i]||'#908060', colD:'#503820',
+      speed:18+randi(0,14), showName:i<4,
+      interactable:i<3, nodeId:i===0?'anna_s2':i===1?'merchant_s2':'guard_s2',
+      patrol:[p,{x:p.x+randi(-24,24),y:p.y+randi(-20,20)},{x:p.x+randi(-18,18),y:p.y+randi(-22,22)}]
+    })));
+    this.entities.push(new Monster(424,78, MDEF.shadowcrab));
+    return map;
+  }
+
+  _s3() {
+    const W=CFG.MW, H=CFG.MH, d=new Array(W*H).fill(T.STONE);
+    const s=(c,r,v)=>{ if(c>=0&&c<W&&r>=0&&r<H) d[r*W+c]=v; };
+    const f=this._fill.bind(this,d,W);
+
+    for(let c=0;c<W;c++){ s(c,0,T.WALL); s(c,H-1,T.WALL); }
+    for(let r=0;r<H;r++){ s(0,r,T.WALL); s(W-1,r,T.WALL); }
+    // City grid roads
+    [9,18,27].forEach(r=>{ for(let c=1;c<W-1;c++) s(c,r,T.ROAD); });
+    [12,25,38].forEach(c=>{ for(let r=1;r<H-1;r++) s(c,r,T.ROAD); });
+    // City blocks
+    [[2,2],[2,11],[2,20],[14,2],[14,11],[14,20],[27,2],[27,11],[27,20],[40,2],[40,11],[40,20]]
+    .forEach(([c,r])=>f(c,r,8,6,T.HOUSE));
+    // Dirt courtyards
+    f(3,3,7,5,T.DIRT); f(15,3,8,4,T.DIRT); f(28,12,7,5,T.DIRT);
+    // Portal to dungeon
+    s(W-3,13,T.PORTAL); s(W-3,14,T.PORTAL);
+
+    const map = new TileMap(d,W,H);
+    map.addZone({cx:(W-3)*16+8, cy:13*16+8, r:30, id:'portal', label:'Dungeon Entrance ↓'});
+    map.addZone({cx:12*16+8, cy:9*16+8,  r:30, id:'center',label:'City Center'});
+    map.addZone({cx:25*16+8, cy:18*16+8, r:30, id:'market', label:'Grand Market'});
+
+    // Guards patrol roads
+    [{x:180,y:144},{x:292,y:144},{x:394,y:144},{x:190,y:288},{x:302,y:288}]
+    .forEach((p,i)=>this.entities.push(new NPC(p.x,p.y,{
+      name:'GUARD',col:'#7080b0',colD:'#405070',speed:28,showName:false,
+      interactable:i===0,nodeId:'guard_city',
+      patrol:[p,{x:p.x+48,y:p.y},{x:p.x+48,y:p.y+14},{x:p.x,y:p.y+14}]
+    })));
+    // Civilians
+    for(let i=0;i<10;i++){
+      const p={x:randi(30,580),y:randi(30,500)};
+      this.entities.push(new NPC(p.x,p.y,{
+        name:'CITIZEN',col:`hsl(${randi(20,55)},28%,${randi(40,55)}%)`,colD:'#303020',
+        speed:randi(14,26),showName:false,interactable:false,
+        patrol:[p,{x:p.x+randi(-38,38),y:p.y+randi(-28,28)}]
+      }));
+    }
+    // Two monsters guarding dungeon area
+    this.entities.push(new Monster(560,192,MDEF.shadowcrab));
+    this.entities.push(new Monster(560,240,MDEF.lurker));
+    return map;
+  }
+
+  _s4() {
+    const W=CFG.MW, H=CFG.MH, d=new Array(W*H).fill(T.DUNG);
+    const s=(c,r,v)=>{ if(c>=0&&c<W&&r>=0&&r<H) d[r*W+c]=v; };
+    const f=this._fill.bind(this,d,W);
+
+    for(let c=0;c<W;c++){ s(c,0,T.WALL); s(c,H-1,T.WALL); }
+    for(let r=0;r<H;r++){ s(0,r,T.WALL); s(W-1,r,T.WALL); }
+    // Corridors
+    for(let c=2;c<W-2;c++) s(c,H/2|0,T.STONE);
+    for(let r=2;r<H-2;r++) s(W/2|0,r,T.STONE);
+    // Rooms
+    f(5,5,10,8,T.STONE); f(30,4,12,9,T.STONE);
+    f(6,20,10,10,T.STONE); f(28,18,14,12,T.STONE);
+    // Lava
+    f(18,4,6,4,T.LAVA); f(17,22,5,5,T.LAVA);
+    // Shrines
+    s(W/2|0,4,T.SHRINE); s(W/2|0,H-3,T.SHRINE);
+    // Portal back
+    s(3,H/2|0,T.PORTAL); s(3,(H/2|0)+1,T.PORTAL);
+
+    const map = new TileMap(d,W,H);
+    map.addZone({cx:(W/2|0)*16+8, cy:4*16+8,    r:26, id:'shrine', label:'Dungeon Shrine'});
+    map.addZone({cx:3*16+8,       cy:(H/2|0)*16+8,r:28,id:'portal', label:'↑ Surface'});
+
+    // Prisoner NPC
+    this.entities.push(new NPC(310,118,{
+      name:'PRISONER', col:'#906858', colD:'#503828', speed:7,
+      showName:true, interactable:true, nodeId:'prisoner_s4',
+      patrol:[{x:310,y:118},{x:316,y:124},{x:310,y:130},{x:304,y:124}]
+    }));
+    // Dungeon monsters (tougher)
+    [{x:128,y:88},{x:402,y:98},{x:108,y:348},{x:452,y:362},{x:310,y:198}]
+    .forEach(p=>this.entities.push(new Monster(p.x,p.y,{
+      ...MDEF.shadowcrab, name:'DUNGEON HORROR', hp:78, speed:58, aggroR:116,
+      captureAt:0.25,
+    })));
+    return map;
+  }
+}
+
+// ─────────────────────────────────────────────
+// §19  HUD
+// ─────────────────────────────────────────────
+class HUD {
+  constructor() {
+    this._hp   = document.getElementById('h-hp');
+    this._pw   = document.getElementById('h-pw');
+    this._lk   = document.getElementById('h-lk');
+    this._slbl = document.getElementById('stage-lbl');
+    this._hint = document.getElementById('ihint');
+    this._ann  = document.getElementById('loc-ann');
+    this._fade = document.getElementById('fade');
+    this._toast= document.getElementById('toast');
+    this._tTimer=null;
+  }
+
+  refresh(player, stage) {
+    if (!player) return;
+    const s = player.stats;
+    this._hp.style.width = s.hp  + '%';
+    this._pw.style.width = s.power + '%';
+    this._lk.style.width = s.luck  + '%';
+    this._slbl.textContent = STAGES[stage]?.label || '';
+  }
+
+  setHint(show, text='[E] INTERACT') {
+    this._hint.textContent = text;
+    this._hint.classList.toggle('on', show);
+  }
+
+  positionHint(cam, wx, wy) {
+    const canvas = document.getElementById('gc');
+    const rect   = canvas.getBoundingClientRect();
+    const scaleX = rect.width  / CFG.NW;
+    const scaleY = rect.height / CFG.NH;
+    const s = cam.ws(wx, wy);
+    this._hint.style.left      = (rect.left + s.x*scaleX) + 'px';
+    this._hint.style.top       = (rect.top  + s.y*scaleY - 28) + 'px';
+    this._hint.style.transform = 'translateX(-50%)';
+  }
+
+  announce(text) {
+    this._ann.textContent = text;
+    this._ann.classList.add('show');
+    setTimeout(() => this._ann.classList.remove('show'), 2600);
+  }
+
+  toast(msg) {
+    this._toast.textContent = msg;
+    this._toast.classList.add('on');
+    clearTimeout(this._tTimer);
+    this._tTimer = setTimeout(() => this._toast.classList.remove('on'), 2400);
+  }
+
+  async transition(fn) {
+    this._fade.classList.add('dark');
+    await new Promise(r => setTimeout(r, 480));
+    fn();
+    await new Promise(r => setTimeout(r, 180));
+    this._fade.classList.remove('dark');
+  }
+}
+
+// ─────────────────────────────────────────────
+// §20  MOBILE CONTROLS
+// ─────────────────────────────────────────────
+function initMobile() {
+  const mc = document.getElementById('mc');
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)
+    || navigator.maxTouchPoints > 2
+    || window.matchMedia('(pointer:coarse)').matches;
+  if (isMobile) {
+    mc.style.display = 'block';
+    Input.initJoystick(
+      document.getElementById('jzone'),
+      document.getElementById('jthumb')
+    );
+    Input.initActionBtn(document.getElementById('btn-e'));
+  }
+}
+
+// ─────────────────────────────────────────────
+// §21  STORY DATABASE
+//   Each node: { onEnter?(eng,world), choices?[] }
+//   Each choice: { text, requires?, cost?, delta?, flags?, action?(eng,world), next? }
+//   action() fires BEFORE next node — this is the gameplay bridge.
+// ─────────────────────────────────────────────
+const STORY = {
+
+  // ── INTRO ─────────────────────────────────────────────────
+  intro: {
+    onEnter(eng, world) {
+      eng.narrator.show(
+        'You wake at the edge of a world that does not know your name.',
+        'NARRATOR', 4500, 'n-mid'
+      );
+    },
+    choices: []
+  },
+
+  // ── STAGE 1: FOREST RUINS ─────────────────────────────────
+  wanderer_s1: {
+    onEnter(eng, world) {
+      eng.narrator.show(
+        '"You look lost," the wanderer says.\n"Three roads from here.\nEach one costs something different."',
+        'WANDERER', 5000, 'n-top'
+      );
+    },
+    choices: [
+      {
+        text: 'Ask about the shrine',
+        delta: { luck: +8 },
+        flags: { asked_shrine: true },
+        action(eng, world) {
+          eng.narrator.show(
+            '"The shrine is older than the trees.\nIt remembers blood.\nGo — it is already waiting for you."',
+            'WANDERER', 4800, 'n-top'
+          );
+          // Player physically walks to shrine area
+          world.player.walkTo(350, 152, 68, () => {
+            eng.enter('shrine_approach', world);
+          });
+        }
+      },
+      {
+        text: 'Ask about the ruins',
+        delta: { power: +5 },
+        action(eng, world) {
+          eng.narrator.show(
+            '"A temple, once.\nNow a warning.\nThe keeper still tends it — ask them what happened."',
+            'WANDERER', 4800, 'n-top'
+          );
+        }
+      },
+      {
+        text: 'Say nothing. Walk away.',
+        delta: { morality: +10, luck: +5 },
+        flags: { silent_start: true },
+        action(eng, world) {
+          eng.narrator.show(
+            'The wanderer watches you leave.\nSilence, they think, is its own kind of answer.',
+            'NARRATOR', 4000, 'n-top'
+          );
+          world.player.walkTo(world.player.x, world.player.y - 55, 70, null);
+        }
+      }
+    ]
+  },
+
+  shrine_approach: {
+    onEnter(eng, world) {
+      world.particles.flame(352, 148);
+      world.particles.flame(356, 152);
+      eng.narrator.show(
+        'The shrine hums with warmth that has no source.\nOld light lives in the stone.',
+        'SHRINE', 4000, 'n-top'
+      );
+    },
+    choices: [
+      {
+        text: 'Offer blood — take power',
+        delta: { hp: -18, power: +22 },
+        flags: { blood_offered: true },
+        action(eng, world) {
+          world.particles.blood(world.player.x, world.player.y);
+          world.cam.addShake(4, 0.30);
+          eng.narrator.show(
+            'The shrine drinks.\nSomething inside you shifts and does not return.',
+            'SHRINE', 4200, 'n-top'
+          );
+          EB.emit('hud:refresh');
+        }
+      },
+      {
+        text: 'Leave an offering — honor it',
+        delta: { morality: +15, luck: +12 },
+        flags: { honored_shrine: true },
+        action(eng, world) {
+          world.particles.spark(352, 148, '#c87040');
+          eng.narrator.show(
+            'The flame brightens.\nThe world feels slightly less against you.',
+            'SHRINE', 4000, 'n-top'
+          );
+        }
+      },
+      {
+        text: 'Study it. Take nothing.',
+        delta: { morality: +5 },
+        flags: { shrine_studied: true },
+        action(eng, world) {
+          eng.narrator.show(
+            '"Knowledge is a kind of offering,"\nthe stone seems to say.\nIt will remember you.',
+            'NARRATOR', 4400, 'n-top'
+          );
+        }
+      }
+    ]
+  },
+
+  ruins_explore: {
+    onEnter(eng, world) {
+      eng.narrator.show(
+        'The ruins hold shapes that should not still be standing.\nSomething kept them upright.',
+        'WORLD', 4000, 'n-top'
+      );
+    },
+    choices: [
+      {
+        text: 'Search for artifacts',
+        delta: { power: +8, luck: -5 },
+        flags: { searched_ruins: true },
+        action(eng, world) {
+          world.cam.addShake(2, 0.12);
+          eng.narrator.show(
+            'You find a shard of something crystalline.\nIt hums at a frequency your teeth can feel.',
+            'NARRATOR', 4200, 'n-top'
+          );
+          EB.emit('toast', '+ Crystal Shard');
+        }
+      },
+      {
+        text: 'Leave them undisturbed',
+        delta: { morality: +10 },
+        flags: { respected_ruins: true },
+        action(eng, world) {
+          eng.narrator.show(
+            'Some silences deserve to be kept.\nThe ruins acknowledge you with stillness.',
+            'NARRATOR', 4000, 'n-top'
+          );
+        }
+      }
+    ]
+  },
+
+  ruinkeeper: {
+    onEnter(eng, world) {
+      eng.narrator.show(
+        '"These stones stood before the burning," the keeper says.\n"And they will outlast whatever comes next."',
+        'RUIN KEEPER', 5000, 'n-top'
+      );
+    },
+    choices: [
+      {
+        text: '"What burning?"',
+        delta: { morality: +5 },
+        action(eng, world) {
+          eng.narrator.show(
+            '"Maren. The village south of here.\nThe Warden\'s men.\nThree seasons ago.\nYou didn\'t know?"',
+            'RUIN KEEPER', 5000, 'n-top'
+          );
+          eng.setFlag('knows_about_maren', true);
+          setTimeout(() => eng.enter('knows_maren', world), 5500);
+        }
+      },
+      {
+        text: 'Ask about the portal in the clearing',
+        flags: { asked_portal: true },
+        action(eng, world) {
+          eng.narrator.show(
+            '"The portal leads to what remains of Maren.\nThey\'ve rebuilt.\nBarely.\nBut they remember what was done."',
+            'RUIN KEEPER', 5000, 'n-top'
+          );
+        }
+      }
+    ]
+  },
+
+  knows_maren: {
+    onEnter(eng, world) {
+      eng.narrator.show(
+        'So the smoke on the horizon was not a harvest fire.',
+        'NARRATOR', 3600, 'n-mid'
+      );
+    },
+    choices: [
+      {
+        text: 'Find the Warden',
+        delta: { power: +10, morality: -5 },
+        flags: { seeking_warden: true },
+        action(eng, world) {
+          eng.narrator.show(
+            '"The village portal will take you closer.\nBut know what you are walking toward."',
+            'RUIN KEEPER', 4500, 'n-top'
+          );
+        }
+      },
+      {
+        text: 'Help the village first',
+        delta: { morality: +20, luck: +8 },
+        flags: { helping_village: true },
+        action(eng, world) {
+          eng.narrator.show(
+            '"A rarer choice than it should be."\nThe keeper nods.\n"The portal is open.\nThey need hands more than heroes."',
+            'RUIN KEEPER', 5500, 'n-top'
+          );
+        }
+      }
+    ]
+  },
+
+  // ── STAGE 2: VILLAGE ──────────────────────────────────────
+  anna_s2: {
+    onEnter(eng, world) {
+      const line = eng.flag('helping_village')
+        ? '"You actually came." She looks as if she expected to wait longer.'
+        : '"Another traveler." She does not look up from her work.\n"There are fewer every season."';
+      eng.narrator.show(line, 'ANNA', 4800, 'n-top');
+    },
+    choices: [
+      {
+        text: '"I came because of Maren."',
+        delta: { reputation: +12, morality: +8 },
+        flags: { told_anna: true },
+        action(eng, world) {
+          eng.narrator.show(
+            '"Then you know what we are dealing with.\nThe Warden does not stop at one village."',
+            'ANNA', 4500, 'n-top'
+          );
+          setTimeout(() => eng.enter('anna_mission', world), 5000);
+        }
+      },
+      {
+        text: '"Just passing through."',
+        delta: { morality: -5, luck: +5 },
+        action(eng, world) {
+          eng.narrator.show(
+            'She looks at you for a long moment.\n"No one just passes through anymore," she says.\n"Not on this road."',
+            'ANNA', 5000, 'n-top'
+          );
+        }
+      }
+    ]
+  },
+
+  anna_mission: {
+    onEnter(eng, world) {
+      eng.narrator.show(
+        '"There are three things the Warden fears.\nWe have one.\nYou can find another.\nThe third..." She pauses.\n"We don\'t speak of the third."',
+        'ANNA', 6000, 'n-top'
+      );
+    },
+    choices: [
+      {
+        text: 'Accept the mission',
+        delta: { morality: +10, power: +5 },
+        flags: { anna_mission: true },
+        action(eng, world) {
+          eng.narrator.show(
+            '"Good. The city gate is north.\nDo not trust the guards.\nTrust those not wearing uniforms."',
+            'ANNA', 5000, 'n-top'
+          );
+          EB.emit('toast', 'Quest: Find the Warden\'s weakness');
+        }
+      },
+      {
+        text: 'Ask what the third thing is',
+        delta: { luck: +10 },
+        flags: { asked_third: true },
+        action(eng, world) {
+          eng.narrator.show(
+            'She goes very still.\n"You," she says.\n"We don\'t speak of it because we weren\'t sure you were real."',
+            'ANNA', 5500, 'n-top'
+          );
+        }
+      }
+    ]
+  },
+
+  merchant_s2: {
+    onEnter(eng, world) {
+      eng.narrator.show(
+        '"Good wares. Fair prices.\nThe Warden\'s tax comes due at dawn —\nso everything must go."',
+        'MERCHANT', 4000, 'n-top'
+      );
+    },
+    choices: [
+      {
+        text: 'Buy a travel torch [costs luck]',
+        cost: { luck: -8 },
+        delta: { luck: -8, power: +5 },
+        flags: { has_torch: true },
+        action(eng, world) {
+          eng.narrator.show('The torch is dense and tarred. It will last.', 'NARRATOR', 3000, 'n-top');
+          EB.emit('toast', '+ Travel Torch');
+        }
+      },
+      {
+        text: 'Ask about the dungeon rumors',
+        action(eng, world) {
+          eng.narrator.show(
+            '"There are things in the dungeon that were not put there by men.\nThe Warden knows. That is why he guards the entrance."',
+            'MERCHANT', 5000, 'n-top'
+          );
+          eng.setFlag('heard_dungeon_lore', true);
+        }
+      }
+    ]
+  },
+
+  guard_s2: {
+    onEnter(eng, world) {
+      eng.narrator.show(
+        '"Move along. Curfew at dusk.\nWarden\'s orders."',
+        'VILLAGE GUARD', 3200, 'n-top'
+      );
+    },
+    choices: []
+  },
+
+  // ── STAGE 3: CITY ─────────────────────────────────────────
+  guard_city: {
+    onEnter(eng, world) {
+      const line = eng.flag('anna_mission')
+        ? '"You\'re the one Anna mentioned.\nWatch yourself in there.\nThe Warden has eyes on the street."'
+        : '"State your business in Vale City."';
+      eng.narrator.show(line, 'CITY GUARD', 4500, 'n-top');
+    },
+    choices: [
+      {
+        text: 'Show Anna\'s letter [requires anna_mission]',
+        requires: { flag: 'anna_mission' },
+        delta: { reputation: +15 },
+        flags: { guard_trust: true },
+        action(eng, world) {
+          eng.narrator.show(
+            '"Alright. The dungeon entrance is east.\nThe Warden\'s men use it as a shortcut.\nWe don\'t officially know this."',
+            'GUARD', 5000, 'n-top'
+          );
+        }
+      },
+      {
+        text: '"Merchant business."',
+        delta: { luck: +5 },
+        action(eng, world) {
+          eng.narrator.show(
+            'The guard eyes you for a long moment.\n"Right. Move along."',
+            'GUARD', 3500, 'n-top'
+          );
+        }
+      },
+      {
+        text: 'Offer coin — bribe your way in',
+        delta: { morality: -10, luck: +10 },
+        flags: { bribed_guard: true },
+        action(eng, world) {
+          eng.narrator.show(
+            'The coin disappears.\nThe guard steps aside.\nNeither of you acknowledge what just happened.',
+            'NARRATOR', 4200, 'n-top'
+          );
+        }
+      }
+    ]
+  },
+
+  // ── STAGE 4: DUNGEON ──────────────────────────────────────
+  prisoner_s4: {
+    onEnter(eng, world) {
+      eng.narrator.show(
+        '"They left me here because I know where the Warden hides.\nHelp me and I will tell you."',
+        'PRISONER', 4500, 'n-top'
+      );
+    },
+    choices: [
+      {
+        text: 'Free the prisoner',
+        delta: { morality: +20, reputation: +15 },
+        flags: { freed_prisoner: true },
+        action(eng, world) {
+          world.particles.spark(world.player.x, world.player.y, '#e8c870');
+          world.cam.addShake(2, 0.15);
+          eng.narrator.show(
+            '"The Warden\'s vault is in the eastern chamber.\nHe keeps everything he fears losing there.\nEverything."',
+            'PRISONER', 5500, 'n-top'
+          );
+          eng.setFlag('knows_vault', true);
+          // Remove the prisoner NPC
+          world.entities = world.entities.filter(e => !(e instanceof NPC && e.name==='PRISONER'));
+        }
+      },
+      {
+        text: '"Tell me first. Then I decide."',
+        delta: { morality: -10, power: +5 },
+        action(eng, world) {
+          eng.narrator.show(
+            '"That is the offer of someone who has already decided no," they say.\n"The Warden taught you well."',
+            'PRISONER', 5000, 'n-top'
+          );
+        }
+      },
+      {
+        text: 'Ask how they ended up here',
+        action(eng, world) {
+          eng.narrator.show(
+            '"I found something I was not supposed to find.\nHe doesn\'t kill people who know things.\nHe just... keeps them."',
+            'PRISONER', 5200, 'n-top'
+          );
+        }
+      }
+    ]
+  },
+};
+
+// ─────────────────────────────────────────────
+// §22  GAME — assembles all systems, runs the loop
+// ─────────────────────────────────────────────
+const Game = (() => {
+  // DOM
+  const canvas = document.getElementById('gc');
+  const ctx    = canvas.getContext('2d');
+
+  // Systems (instantiated once)
+  const cam      = new Camera(CFG.NW, CFG.NH);
+  const particles= new Particles();
+  const narrator = new NarratorUI();
+  const choiceUI = new ChoiceUI();
+  const eng      = new NarrativeEngine(narrator, choiceUI);
+  const worldMgr = new WorldManager();
+  const hud      = new HUD();
+  let   summons  = new SummonSys();
+  let   player   = new Player(320, 272);
+
+  // Loop state
+  let running = false;
+  let lastT   = 0;
+  let acc     = 0;
+  let ambT    = 0;   // ambient effect accumulator
+
+  // ── Live world object — passed to every system ────
+  // Using getters so references stay valid across stage transitions
+  const world = {
+    get player()   { return player;             },
+    get map()      { return worldMgr.map;       },
+    get entities() { return worldMgr.entities;  },
+    set entities(v){ worldMgr.entities = v;     },
+    get cam()      { return cam;                },
+    get particles(){ return particles;          },
+    get summons()  { return summons;            },
+    get stage()    { return worldMgr.stage;     },
+    get eng()      { return eng;                },
+  };
+
+  // ── Event wiring ──────────────────────────────────
+  EB.on('hud:refresh',    () => hud.refresh(player, worldMgr.stage));
+  EB.on('narrator:q',    d  => narrator.show(d.text, d.tag, d.dur, d.pos||'n-top'));
+  EB.on('summon:refresh', () => _renderSummonPanel());
+  EB.on('toast',          msg=> hud.toast(msg));
+  EB.on('act',            () => _handleInteract());
+
+  // ── Stage transition ──────────────────────────────
+  async function _stageTransition(to) {
+    if (to < 1 || to > 4) {
+      narrator.show('There is no road beyond this point. Not yet.', 'WORLD', 3500, 'n-top');
+      return;
+    }
+    await hud.transition(() => {
+      worldMgr.build(to);
+      worldMgr.spawnPlayer(player);
+      summons.tick();
+      choiceUI.hide();
+    });
+    hud.refresh(player, to);
+    hud.announce(STAGES[to]?.label || '');
+    const intros = {
+      2: 'The trees give way to rooftops.\nMaren — or what it is becoming — stretches ahead.',
+      3: 'Vale City.\nStone and pretense, as far as the eye goes.',
+      4: 'The air changes underground.\nSomething here has been waiting a long time for company.',
+    };
+    if (intros[to]) setTimeout(() => narrator.show(intros[to], 'NARRATOR', 5000, 'n-top'), 600);
+  }
+
+  // ── Interact handler ──────────────────────────────
+  function _handleInteract() {
+    if (!running) return;
+
+    const px = player.x, py = player.y;
+
+    // 1. Capturable monster nearby?
+    const nearM = worldMgr.entities.find(e =>
+      e instanceof Monster && e.alive && e.interactable && dist2(e.x,e.y,px,py) < CFG.IRAD
+    );
+    if (nearM) {
+      summons.capture(nearM, world);
+      nearM.alive = false;
+      return;
+    }
+
+    // 2. Interactable NPC nearby?
+    const nearNPC = worldMgr.entities.find(e =>
+      e instanceof NPC && e.alive && e.interactable && dist2(e.x,e.y,px,py) < CFG.IRAD
+    );
+    if (nearNPC && nearNPC.nodeId && !nearNPC._talked) {
+      nearNPC._talked = true;
+      eng.enter(nearNPC.nodeId, world);
+      return;
+    }
+
+    // 3. Zone?
+    const zone = worldMgr.map.nearZone(px, py);
+    if (zone) {
+      switch (zone.id) {
+        case 'portal':
+          _stageTransition(worldMgr.stage + 1);
+          break;
+        case 'shrine':
+          if (!eng.flag('shrine_visited')) {
+            eng.setFlag('shrine_visited', true);
+            eng.enter('shrine_approach', world);
+          } else {
+            narrator.show('The shrine has already given what it had for you.', 'SHRINE', 3200, 'n-top');
+          }
+          break;
+        case 'ruins':
+          eng.enter('ruins_explore', world);
+          break;
+        case 'market':
+          narrator.show(
+            'The market hums with quiet desperation.\nGoods change hands.\nStories stay where they are.',
+            'WORLD', 4000, 'n-top'
+          );
+          break;
+        case 'center':
+          narrator.show(
+            'The city center. Guards on every corner.\nNo one looks anyone in the eye.',
+            'WORLD', 3800, 'n-top'
+          );
+          break;
+        case 'exit':
+          _stageTransition(worldMgr.stage - 1);
+          break;
+      }
+    }
+  }
+
+  // ── Fixed-step update ─────────────────────────────
+  function _update(dt) {
+    AT += dt;          // global anim clock for tiles
+    ambT += dt;
+
+    // Camera
+    cam.update(dt, worldMgr.map.pw, worldMgr.map.ph, player);
+
+    // Player
+    player.update(dt, world);
+
+    // Entities
+    for (let i = worldMgr.entities.length-1; i >= 0; i--) {
+      const e = worldMgr.entities[i];
+      if (!e.alive) { worldMgr.entities.splice(i,1); continue; }
+      e.update(dt, world);
+    }
+
+    // Proximity flags (for hint and interact indicator)
+    player.nearZone   = worldMgr.map.nearZone(player.x, player.y);
+    player.nearEntity = worldMgr.entities.find(e =>
+      e.alive && e.interactable && dist2(e.x,e.y,player.x,player.y) < CFG.IRAD
+    ) || null;
+
+    // Ambient particles
+    if (ambT > 0.13) {
+      ambT = 0;
+      // Shrine flames (all stages)
+      worldMgr.map.zones.filter(z => z.id==='shrine').forEach(z => particles.flame(z.cx, z.cy));
+      // Dungeon lava
+      if (worldMgr.stage===4 && Math.random()<0.28)
+        particles.emit({x:rand(280,310),y:rand(64,88),n:2,speed:7,decay:0.65,sz:2,col:'#c04010',grav:-10});
+    }
+    // Stage 2 rain
+    if (worldMgr.stage===2 && Math.random()<0.12)
+      particles.splash(rand(0, worldMgr.map.pw), rand(0, worldMgr.map.ph));
+
+    particles.update(dt);
+
+    // HUD hint
+    const hasTarget = !!(player.nearZone || player.nearEntity);
+    let hintText = '[E] INTERACT';
+    if (player.nearEntity instanceof Monster) hintText = '[E] CAPTURE';
+    else if (player.nearEntity instanceof NPC) hintText = `[E] TALK`;
+    else if (player.nearZone) hintText = `[E] ${player.nearZone.label}`;
+    hud.setHint(hasTarget, hintText);
+    if (hasTarget) hud.positionHint(cam, player.x, player.y - 14);
+
+    Input.update();
+    EB.emit('hud:refresh');
+  }
+
+  // ── Render ────────────────────────────────────────
+  function _render() {
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = STAGES[worldMgr.stage]?.sky || '#07080f';
+    ctx.fillRect(0, 0, CFG.NW, CFG.NH);
+
+    // Tilemap
+    worldMgr.map.draw(ctx, cam);
+
+    // Zone pulsing markers
+    worldMgr.map.zones.forEach(z => {
+      if (!cam.vis(z.cx-22, z.cy-22, 44,44)) return;
+      const s = cam.ws(z.cx, z.cy);
+      const p = Math.sin(AT*3 + z.cx*0.01)*0.5+0.5;
+      ctx.globalAlpha = 0.22 + p*0.22;
+      ctx.fillStyle = '#e8c870';
+      ctx.fillRect(Math.round(s.x)-5, Math.round(s.y)-5, 10, 10);
+      ctx.globalAlpha = 1;
+    });
+
+    // Entities — Y-sorted depth
+    const drawOrder = [...worldMgr.entities, player].sort((a,b) => a.y - b.y);
+    drawOrder.forEach(e => { if (e.alive !== false) e.draw(ctx, cam); });
+
+    // Particles
+    particles.draw(ctx, cam);
+
+    // Dungeon vignette
+    if (worldMgr.stage===4) {
+      const g = ctx.createRadialGradient(CFG.NW/2,CFG.NH/2,72, CFG.NW/2,CFG.NH/2,200);
+      g.addColorStop(0,'rgba(0,0,0,0)');
+      g.addColorStop(1,'rgba(0,0,0,0.58)');
+      ctx.fillStyle=g; ctx.fillRect(0,0,CFG.NW,CFG.NH);
+    }
+  }
+
+  // ── Game loop (RAF) ───────────────────────────────
+  function _loop(ts) {
+    if (!running) return;
+    const dt = Math.min((ts - lastT) / 1000, CFG.MAXDT);
+    lastT = ts;
+    acc += dt;
+    while (acc >= CFG.FSTEP) { _update(CFG.FSTEP); acc -= CFG.FSTEP; }
+    _render();
+    requestAnimationFrame(_loop);
+  }
+
+  // ── Canvas scaling ────────────────────────────────
+  function _resize() {
+    const sw = window.innerWidth, sh = window.innerHeight;
+    // Integer scale, fallback to fractional on small screens
+    let sc = Math.min(Math.floor(sw/CFG.NW), Math.floor(sh/CFG.NH));
+    if (sc < 1) sc = Math.min(sw/CFG.NW, sh/CFG.NH);
+    canvas.width  = CFG.NW;
+    canvas.height = CFG.NH;
+    canvas.style.width  = Math.round(CFG.NW * sc) + 'px';
+    canvas.style.height = Math.round(CFG.NH * sc) + 'px';
+    cam.vw = CFG.NW; cam.vh = CFG.NH;
+  }
+
+  // ── Summon panel render ───────────────────────────
+  function _renderSummonPanel() {
+    const el = document.getElementById('summons');
+    el.innerHTML = '';
+    for (const s of Object.values(summons.bag)) {
+      const rdy   = s.cd===0 && s.uses < s.max;
+      const spent = s.uses >= s.max;
+      const div   = document.createElement('div');
+      div.className = 'ss' + (rdy?' rdy':spent?' spent':'');
+      div.innerHTML = `${s.name}<br><span style="font-size:4.5px;opacity:0.7">
+        ${s.cd>0?'CD:'+s.cd:spent?'SPENT':'READY'} · ${s.uses}/${s.max}</span>`;
+      if (rdy) div.addEventListener('click', () => {
+        summons.use(s.def.id, world);
+        _renderSummonPanel();
+      });
+      el.appendChild(div);
+    }
+  }
+
+  // ── Public start ──────────────────────────────────
+  function start() {
+    document.getElementById('title').style.display = 'none';
+    _resize();
+    window.addEventListener('resize', _resize);
+    narrator.init();
+    initMobile();
+
+    worldMgr.build(1);
+    worldMgr.spawnPlayer(player);
+    cam.x = player.x - CFG.NW/2;
+    cam.y = player.y - CFG.NH/2;
+
+    hud.refresh(player, 1);
+    hud.announce(STAGES[1].label);
+
+    running = true;
+    lastT   = performance.now();
+    requestAnimationFrame(_loop);
+
+    // Opening sequence
+    setTimeout(() => eng.enter('intro', world), 400);
+    setTimeout(() => narrator.show(
+      'WASD or arrow keys to move.\nPress E near glowing markers to interact.\nWeaken monsters to capture them.',
+      'GUIDE', 5500, 'n-top'
+    ), 5500);
+  }
+
+  return { start };
+})();
+
+// ── Wire title button ──────────────────────────
+document.getElementById('start-btn').addEventListener('click', () => Game.start());
+  window._AshGame = Game;
+
+// ── Prevent mobile scroll / zoom ──────────────
+document.addEventListener('touchmove', e => e.preventDefault(), {passive:false});
+document.addEventListener('contextmenu', e => e.preventDefault());
